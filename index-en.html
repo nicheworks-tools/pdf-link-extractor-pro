@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>PDF Link Extractor Pro — Hybrid (URLs + Emails + Phones)</title>
+  <link rel="stylesheet" href="./style.css" />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <style>
+    .banner{margin:16px 0;padding:12px 14px;border-radius:10px;border:1px solid #e5e7eb}
+    .banner.info{background:#eef2ff;border-color:#c7d2fe;color:#1e3a8a}
+    .banner.success{background:#ecfdf5;border-color:#a7f3d0;color:#065f46}
+    .banner.warn{background:#fff7ed;border-color:#fed7aa;color:#7c2d12}
+    .banner .actions{margin-top:8px}
+    .btn-inline{display:inline-block;margin-right:8px;padding:6px 10px;border-radius:8px;border:1px solid #d1d5db}
+  </style>
+</head>
+<body>
+  <header class="container">
+    <h1>PDF Link Extractor Pro <span class="badge">Test</span></h1>
+    <p class="sub">
+      Extract <b>URLs / email addresses / phone numbers</b> from PDFs and save results. Stripe is in test mode.
+    </p>
+    <div id="topBanner"></div>
+  </header>
+
+  <main class="container">
+    <section class="card">
+      <h2>1. Select PDF</h2>
+      <input id="fileInput" type="file" accept="application/pdf" />
+      <div id="fileMeta" class="meta"></div>
+    </section>
+
+    <section class="card">
+      <h2>2. Extraction Options</h2>
+      <div class="row">
+        <label><input type="checkbox" id="filterHttp" checked /> http/https</label>
+        <label><input type="checkbox" id="filterEmail" /> email (plain text included)</label>
+        <label><input type="checkbox" id="filterTel" /> phone (plain text included)</label>
+        <label><input type="checkbox" id="filterFtp" /> ftp</label>
+      </div>
+      <button id="extractBtn" type="button">Run Extraction ▶︎</button>
+      <div id="limitNote" class="note">
+        <strong>Free mode:</strong> up to <b>10 items</b> can be shown & saved.<br />
+        Unlock to remove the limit (test mode).
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>3. Results</h2>
+      <div id="resultCount" class="meta"></div>
+      <ol id="resultList"></ol>
+      <div class="row actions">
+        <button id="saveTxtBtn" type="button" disabled>Save as TXT</button>
+        <button id="saveCsvBtn" type="button" disabled>Save as CSV</button>
+      </div>
+    </section>
+
+    <section class="card pay">
+      <h2>Unlock (Test)</h2>
+      <p>Use Stripe test cards such as <code>4242 4242 4242 4242</code>.</p>
+      <div class="row">
+        <!-- Opens in a new tab; we keep this tab intact -->
+        <a class="btn" id="payLink" href="https://buy.stripe.com/test_4gMbJ31NmfME1CadMy2Ry01" target="_blank" rel="noopener">Proceed to payment (¥200 / 24h)</a>
+        <button id="iPaidBtn" class="btn secondary" type="button">Mark as paid (manual)</button>
+      </div>
+      <p class="small">* The checkout opens in a <b>new tab</b>. Keep this tab open; come back here after payment.</p>
+    </section>
+  </main>
+
+  <footer class="container foot">
+    <div><strong>Security:</strong> All processing runs in your browser. Files are not uploaded.</div>
+    <div class="muted">© 2025 Niche Works — Test Build</div>
+  </footer>
+
+  <!-- pdf.js (local) -->
+  <script src="./vendor/pdf.min.js"></script>
+
+  <script>
+    // ---- Unlock & UX helpers ----
+    const unlockedKey = "pdf_link_extractor_unlocked_until";
+    const unlockHours = 24;
+    const payInProgressKey = "pdf_link_extractor_payment_in_progress";
+
+    function setUnlocked(hours = unlockHours) {
+      const until = Date.now() + hours * 3600 * 1000;
+      localStorage.setItem(unlockedKey, String(until));
+      updateUnlockUI();
+    }
+    function isUnlocked() {
+      const until = Number(localStorage.getItem(unlockedKey) || 0);
+      return until > Date.now();
+    }
+    function remainingHours() {
+      const until = Number(localStorage.getItem(unlockedKey) || 0);
+      if (until <= Date.now()) return 0;
+      return ((until - Date.now())/3600000).toFixed(1);
+    }
+
+    function banner(el, kind, html){
+      el.innerHTML = `<div class="banner ${kind}">${html}</div>`;
+    }
+    function clearBanner(el){ el.innerHTML = ""; }
+
+    function updateUnlockUI() {
+      const note = document.getElementById("limitNote");
+      const paidBtn = document.getElementById("iPaidBtn");
+      if (isUnlocked()) {
+        note.innerHTML = `<strong>Unlocked:</strong> Active for ~${remainingHours()}h. Full list & saving enabled.`;
+        if (paidBtn){ paidBtn.disabled = true; paidBtn.textContent = "Unlocked"; }
+      }
+    }
+
+    // ---- pdf.js init ----
+    (function(){
+      const lib = window.pdfjsLib;
+      if (!lib || !lib.getDocument) {
+        alert("Failed to load pdf.js. Check /vendor placement.");
+        return;
+      }
+      lib.GlobalWorkerOptions.workerSrc = "./vendor/pdf.worker.min.js";
+    })();
+
+    // ---- DOM refs ----
+    const topBanner = document.getElementById("topBanner");
+    const fileInput  = document.getElementById("fileInput");
+    const fileMeta   = document.getElementById("fileMeta");
+    const extractBtn = document.getElementById("extractBtn");
+    const resultCount= document.getElementById("resultCount");
+    const resultList = document.getElementById("resultList");
+    const saveTxtBtn = document.getElementById("saveTxtBtn");
+    const saveCsvBtn = document.getElementById("saveCsvBtn");
+    const iPaidBtn   = document.getElementById("iPaidBtn");
+    const payLink    = document.getElementById("payLink");
+    const filterHttp = document.getElementById("filterHttp");
+    const filterEmail= document.getElementById("filterEmail");
+    const filterTel  = document.getElementById("filterTel");
+    const filterFtp  = document.getElementById("filterFtp");
+    let currentLinks = [];
+
+    // ---- Payment UX ----
+    payLink.addEventListener("click", ()=>{
+      localStorage.setItem(payInProgressKey, "1");
+      banner(topBanner, "info",
+        "<b>Opened checkout in a new tab.</b> Keep this tab open. After payment, come back here and it will unlock automatically.");
+    });
+
+    window.addEventListener("focus", updateUnlockUI);
+    document.addEventListener("visibilitychange", ()=>{ if (!document.hidden) updateUnlockUI(); });
+
+    (function handlePaidQuery(){
+      const p = new URLSearchParams(location.search);
+      if (p.get("paid")==="1"){
+        setUnlocked();
+        try{ history.replaceState({}, "", location.pathname); }catch(e){}
+        localStorage.removeItem(payInProgressKey);
+        banner(topBanner, "success",
+          "<b>Payment completed. Unlocked.</b><div class='actions'><span class='muted'>For security reasons, the file cannot be kept across tabs.</span> <button class='btn-inline' id='reselectBtn'>Select PDF again</button></div>");
+        setTimeout(()=>{
+          const btn = document.getElementById("reselectBtn");
+          if (btn){ btn.addEventListener("click", ()=> fileInput.click()); }
+        }, 0);
+      } else if (localStorage.getItem(payInProgressKey)==="1" && !isUnlocked()){
+        banner(topBanner, "warn", "Checkout is open. After completing payment, return to this tab to apply unlock.");
+      }
+    })();
+
+    updateUnlockUI();
+
+    // ---- Helpers ----
+    function blobToArrayBuffer(file) {
+      return new Promise((resolve, reject) => {
+        const r = new FileReader(); r.onload = () => resolve(r.result); r.onerror = reject; r.readAsArrayBuffer(file);
+      });
+    }
+    function detectType(url) {
+      const u = (url || "").toLowerCase();
+      if (u.startsWith("http://") || u.startsWith("https://")) return "http";
+      if (u.startsWith("mailto:")) return "mailto";
+      if (u.startsWith("tel:")) return "tel";
+      if (u.startsWith("ftp://")) return "ftp";
+      return "other";
+    }
+    function normalizeTelLink(s){ return "tel:" + s.replace(/[^\d+]/g, ""); }
+    function hrefFor(item){
+      if (item.type==="http"||item.type==="ftp") return item.url;
+      if (item.type==="mailto") return item.url.toLowerCase().startsWith("mailto:")?item.url:("mailto:"+item.url);
+      if (item.type==="tel")    return item.url.toLowerCase().startsWith("tel:")?item.url:normalizeTelLink(item.url);
+      return item.url;
+    }
+
+    async function extractLinksFromPDF(file) {
+      const lib = window.pdfjsLib;
+      const buf = await blobToArrayBuffer(file);
+      const pdf = await lib.getDocument({ data: buf }).promise;
+
+      const urlRegex   = /(?:https?:\/\/[^\s<>"')]+|ftp:\/\/[^\s<>"')]+)/gi;
+      const emailRegex = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
+      const phoneRegex = /\+?\d[\d\s\-()]{6,}\d/g;
+
+      const out = [], seen = new Set();
+
+      for (let p=1; p<=pdf.numPages; p++){
+        const page = await pdf.getPage(p);
+
+        const ann = await page.getAnnotations({ intent:"display" });
+        ann.forEach(a=>{
+          if (a && a.subtype==="Link" && a.url){
+            const key = `${p}|${a.url}`; if (!seen.has(key)){ seen.add(key); out.push({type:detectType(a.url), url:a.url, page:p}); }
+          }
+        });
+
+        const text = (await page.getTextContent()).items.map(i=>i.str).join(" ");
+
+        let m;
+        while ((m=urlRegex.exec(text))!==null){
+          const v = m[0], key = `${p}|${v}`;
+          if (!seen.has(key)){ seen.add(key); out.push({type:detectType(v), url:v, page:p}); }
+        }
+        while ((m=emailRegex.exec(text))!==null){
+          const v = m[0], key = `${p}|${v}`;
+          if (!seen.has(key)){ seen.add(key); out.push({type:"mailto", url:v, page:p}); }
+        }
+        while ((m=phoneRegex.exec(text))!==null){
+          const v = m[0], key = `${p}|${v}`;
+          if (!seen.has(key)){ seen.add(key); out.push({type:"tel", url:v, page:p}); }
+        }
+      }
+      return out;
+    }
+
+    function applyTypeFilter(all){
+      const types = [];
+      if (filterHttp.checked)  types.push("http");
+      if (filterEmail.checked) types.push("mailto");
+      if (filterTel.checked)   types.push("tel");
+      if (filterFtp.checked)   types.push("ftp");
+      const enabled = types.length ? types : ["http"];
+      return all.filter(x=>enabled.includes(x.type));
+    }
+
+    function renderList(links){
+      resultList.innerHTML = "";
+      links.forEach(item=>{
+        const li = document.createElement("li");
+        const tag = item.type.toUpperCase();
+        const href = hrefFor(item);
+        li.innerHTML =
+          '<span class="tag tag-' + item.type + '">' + tag + "</span> " +
+          '<a href="' + href + '" target="_blank" rel="noopener">' + item.url + "</a>" +
+          ' <span class="muted"> (p.' + item.page + ")</span>";
+        resultList.appendChild(li);
+      });
+    }
+
+    function downloadTxt(links){
+      const text = links.map(l=>l.url).join("\n");
+      const blob = new Blob([text], { type:"text/plain;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a"); a.href = url; a.download = "links.txt"; document.body.appendChild(a); a.click(); URL.revokeObjectURL(url); a.remove();
+    }
+    function downloadCsv(links){
+      const header = ["type","url","page"];
+      const rows = links.map(l=>[l.type, '"' + l.url.replace(/"/g,'""') + '"', l.page]);
+      const csv = [header, ...rows].map(r=>r.join(",")).join("\n");
+      const blob = new Blob([csv], { type:"text/csv;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a"); a.href = url; a.download = "links.csv"; document.body.appendChild(a); a.click(); URL.revokeObjectURL(url); a.remove();
+    }
+
+    // ---- Events ----
+    fileInput.addEventListener("change", ()=>{
+      const f = fileInput.files[0]; if (!f) return;
+      fileMeta.textContent = `${f.name} — ${(f.size/1024/1024).toFixed(2)} MB`;
+      clearBanner(topBanner);
+    });
+
+    extractBtn.addEventListener("click", async ()=>{
+      const f = fileInput.files[0];
+      if (!f){ alert("Please select a PDF file."); return; }
+
+      resultList.innerHTML = "";
+      resultCount.textContent = "Extracting…";
+
+      try{
+        let links = await extractLinksFromPDF(f);
+        links = applyTypeFilter(links);
+
+        const unlocked = isUnlocked();
+        let shown = unlocked ? links : links.slice(0, 10);
+
+        currentLinks = shown;
+        renderList(shown);
+        resultCount.textContent = `Results: ${shown.length} items (Total: ${links.length})`;
+
+        const canSave = unlocked && shown.length > 0;
+        saveTxtBtn.disabled = !canSave;
+        saveCsvBtn.disabled = !canSave;
+      }catch(e){
+        console.error(e);
+        resultCount.textContent = "Extraction failed. Please check your PDF.";
+      }
+    });
+
+    document.getElementById("saveTxtBtn").addEventListener("click", () => downloadTxt(currentLinks));
+    document.getElementById("saveCsvBtn").addEventListener("click", () => downloadCsv(currentLinks));
+    iPaidBtn.addEventListener("click", () => {
+      setUnlocked();
+      alert("Unlocked for test. Please run extraction again.");
+    });
+  </script>
+</body>
+</html>
