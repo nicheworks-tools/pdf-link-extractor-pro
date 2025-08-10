@@ -1,0 +1,23 @@
+*{box-sizing:border-box}body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;line-height:1.6;margin:0;background:#f7f7fb;color:#222}
+.container{max-width:920px;margin:0 auto;padding:16px}
+header{padding-top:24px}
+h1{margin:0 0 6px 0;font-size:28px}
+.badge{font-size:12px;background:#eef;border:1px solid #cdd; padding:2px 6px;border-radius:6px;margin-left:8px}
+.sub{color:#555;margin-top:4px}
+.card{background:#fff;border:1px solid #e5e7eb;border-radius:14px;padding:16px;margin:14px 0;box-shadow:0 1px 2px rgba(0,0,0,.03)}
+.row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+.meta{color:#666;font-size:14px;margin-top:8px}
+.note{background:#f5f7ff;border:1px dashed #c7d2fe;padding:10px;border-radius:10px;margin-top:10px}
+ol{padding-left:20px}
+.actions{margin-top:12px}
+.btn{display:inline-block;background:#111;color:#fff;text-decoration:none;border:none;padding:10px 14px;border-radius:10px;cursor:pointer}
+.btn.secondary{background:#444}
+.btn:disabled{opacity:.6;cursor:not-allowed}
+.tag{display:inline-block;font-size:11px;padding:2px 6px;border-radius:6px;border:1px solid #ddd;margin-right:6px;color:#333}
+.tag-http{background:#e7f7ff;border-color:#b6e0f5}
+.tag-mailto{background:#fff4e5;border-color:#ffd8a8}
+.tag-tel{background:#e9ffe8;border-color:#b7f0b2}
+.tag-ftp{background:#f4e9ff;border-color:#dfc5ff}
+.muted{color:#888;font-size:12px}
+.foot{padding-bottom:40px;color:#666}
+.pay .small{color:#666;font-size:13px;margin-top:8px}
