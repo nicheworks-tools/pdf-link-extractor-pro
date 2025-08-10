@@ -3,17 +3,25 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>PDFリンク抽出 Pro — Hybrid (URLs + Emails + Phones)</title>
+  <title>PDFリンク抽出 Pro — Hybrid</title>
   <link rel="stylesheet" href="./style.css" />
   <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <style>
+    .banner{margin:16px 0;padding:12px 14px;border-radius:10px;border:1px solid #e5e7eb}
+    .banner.info{background:#eef2ff;border-color:#c7d2fe;color:#1e3a8a}
+    .banner.success{background:#ecfdf5;border-color:#a7f3d0;color:#065f46}
+    .banner.warn{background:#fff7ed;border-color:#fed7aa;color:#7c2d12}
+    .banner .actions{margin-top:8px}
+    .btn-inline{display:inline-block;margin-right:8px;padding:6px 10px;border-radius:8px;border:1px solid #d1d5db}
+  </style>
 </head>
 <body>
   <header class="container">
     <h1>PDFリンク抽出 Pro <span class="badge">Test</span></h1>
     <p class="sub">
-      PDF内の <b>URL／メールアドレス／電話番号</b> を抽出し、一覧表示・保存（テスト版）。<br />
-      ※ Stripeはテストモード。決済はダミーです。
+      PDF内の <b>URL／メールアドレス／電話番号</b> を抽出し、一覧表示・保存。Stripeはテストモードです。
     </p>
+    <div id="topBanner"></div>
   </header>
 
   <main class="container">
@@ -50,12 +58,13 @@
 
     <section class="card pay">
       <h2>制限解除（テスト）</h2>
-      <p>以下は<b>Stripeのテスト支払い</b>です。ダミーカード <code>4242 4242 4242 4242</code> などで試せます。</p>
+      <p>ダミーカード <code>4242 4242 4242 4242</code> などでテストできます。</p>
       <div class="row">
+        <!-- 別タブで開く。クリック時に「決済中フラグ」を保存 -->
         <a class="btn" id="payLink" href="https://buy.stripe.com/test_4gMbJ31NmfME1CadMy2Ry01" target="_blank" rel="noopener">支払いに進む（¥200 / 24h）</a>
-        <button id="iPaidBtn" class="btn secondary" type="button">支払い完了後に解除</button>
+        <button id="iPaidBtn" class="btn secondary" type="button">支払い完了後に解除（手動）</button>
       </div>
-      <p class="small">※ デモでは「解除」を押すと24hローカル解除。本番はWebhooks等で自動解除を推奨。</p>
+      <p class="small">※ 決済は <b>別タブ</b>で開きます。<b>このタブは開いたまま</b>にして、支払い後に戻ってきてください。</p>
     </section>
   </main>
 
@@ -64,285 +73,249 @@
     <div class="muted">© 2025 Niche Works — Test Build</div>
   </footer>
 
-  <!-- pdf.js（ローカル）を最後に読み込み -->
+  <!-- pdf.js（ローカル） -->
   <script src="./vendor/pdf.min.js"></script>
 
-  <!-- アプリ本体 -->
   <script>
-    console.log('[init] index script start');
+    // ---- ユーティリティ（解除管理） ----
     const unlockedKey = "pdf_link_extractor_unlocked_until";
     const unlockHours = 24;
+    const payInProgressKey = "pdf_link_extractor_payment_in_progress";
 
-    (function initApp() {
-      const lib = window.pdfjsLib;
-      console.log('[init] window.pdfjsLib =', lib);
-      if (!lib || !lib.getDocument) {
-        alert("pdf.jsが読み込めていません。/vendor/pdf.min.js の配信・パスを確認してください。");
-        return;
-      }
-      try {
-        lib.GlobalWorkerOptions.workerSrc = "./vendor/pdf.worker.min.js";
-        console.log('[init] workerSrc set ./vendor/pdf.worker.min.js');
-      } catch (e) {
-        console.error('workerSrc set failed:', e);
-        alert('vendor/pdf.worker.min.js の配置を確認してください。');
-        return;
-      }
-
-      // ---- 課金解除ユーティリティ ----
-      function isUnlocked() {
-        const p = new URLSearchParams(location.search);
-        if (p.get("paid") === "1") {
-          const until = Date.now() + unlockHours * 3600 * 1000;
-          localStorage.setItem(unlockedKey, String(until));
-          return true;
-        }
-        const until = Number(localStorage.getItem(unlockedKey) || 0);
-        return until > Date.now();
-      }
-      function setUnlocked() {
-        const until = Date.now() + unlockHours * 3600 * 1000;
-        localStorage.setItem(unlockedKey, String(until));
-        updateUnlockUI();
-      }
-      function remainingHours() {
-        const until = Number(localStorage.getItem(unlockedKey) || 0);
-        if (until <= Date.now()) return 0;
-        return ((until - Date.now()) / 3600000).toFixed(1);
-      }
-      function updateUnlockUI() {
-        const note = document.getElementById("limitNote");
-        const paidBtn = document.getElementById("iPaidBtn");
-        if (isUnlocked()) {
-          note.innerHTML = "<strong>有料モード：</strong> 制限解除中（残り約 " + remainingHours() + " 時間）。全件表示・保存が可能です。";
-          paidBtn.disabled = true;
-          paidBtn.textContent = "解除中";
-        }
-      }
-
-      // ---- DOM要素 ----
-      const fileInput  = document.getElementById("fileInput");
-      const fileMeta   = document.getElementById("fileMeta");
-      const extractBtn = document.getElementById("extractBtn");
-      const resultCount= document.getElementById("resultCount");
-      const resultList = document.getElementById("resultList");
-      const saveTxtBtn = document.getElementById("saveTxtBtn");
-      const saveCsvBtn = document.getElementById("saveCsvBtn");
-      const iPaidBtn   = document.getElementById("iPaidBtn");
-      const filterHttp = document.getElementById("filterHttp");
-      const filterEmail= document.getElementById("filterEmail");
-      const filterTel  = document.getElementById("filterTel");
-      const filterFtp  = document.getElementById("filterFtp");
-      let currentLinks = [];
-
-      // ---- ヘルパー ----
-      function blobToArrayBuffer(file) {
-        return new Promise((resolve, reject) => {
-          const r = new FileReader();
-          r.onload = () => resolve(r.result);
-          r.onerror = reject;
-          r.readAsArrayBuffer(file);
-        });
-      }
-
-      function detectType(url) {
-        const u = (url || "").toLowerCase();
-        if (u.startsWith("http://") || u.startsWith("https://")) return "http";
-        if (u.startsWith("mailto:")) return "mailto";
-        if (u.startsWith("tel:")) return "tel";
-        if (u.startsWith("ftp://")) return "ftp";
-        // 生のメール・電話の可能性は別処理で判定
-        return "other";
-      }
-
-      function isEmail(text) {
-        return /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i.test(text);
-      }
-      function isPhone(text) {
-        return /^\+?\d[\d\s\-()]{6,}\d$/.test(text.trim());
-      }
-      function normalizeTelLink(s) {
-        return "tel:" + s.replace(/[^\d+]/g, "");
-      }
-      function makeHref(item) {
-        if (item.type === "http" || item.type === "ftp") return item.url;
-        if (item.type === "mailto") {
-          return item.url.toLowerCase().startsWith("mailto:") ? item.url : ("mailto:" + item.url);
-        }
-        if (item.type === "tel") {
-          return item.url.toLowerCase().startsWith("tel:") ? item.url : normalizeTelLink(item.url);
-        }
-        return item.url;
-      }
-
-      // ---- ハイブリッド抽出 ----
-      async function extractLinksFromPDF(file) {
-        const buf = await blobToArrayBuffer(file);
-        const pdf = await lib.getDocument({ data: buf }).promise;
-
-        // URL/メール/電話の検出（注：簡易な正規表現です）
-        const urlRegex   = /(?:https?:\/\/[^\s<>"')]+|ftp:\/\/[^\s<>"')]+)/gi;
-        const emailRegex = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
-        const phoneRegex = /\+?\d[\d\s\-()]{6,}\d/g;
-
-        const out = [];
-        const seen = new Set(); // 重複排除（page|value）
-
-        for (let p = 1; p <= pdf.numPages; p++) {
-          const page = await pdf.getPage(p);
-
-          // 1) 注釈リンク
-          const annots = await page.getAnnotations({ intent: "display" });
-          annots.forEach(a => {
-            if (a && a.subtype === "Link" && a.url) {
-              const val = a.url;
-              const key = `${p}|${val}`;
-              if (!seen.has(key)) {
-                seen.add(key);
-                out.push({ type: detectType(val), url: val, page: p });
-              }
-            }
-          });
-
-          // 2) テキストから検出
-          const textContent = await page.getTextContent();
-          const text = textContent.items.map(i => i.str).join(" ");
-
-          // URL
-          let m;
-          while ((m = urlRegex.exec(text)) !== null) {
-            const val = m[0];
-            const key = `${p}|${val}`;
-            if (!seen.has(key)) {
-              seen.add(key);
-              out.push({ type: detectType(val), url: val, page: p });
-            }
-          }
-          // email
-          while ((m = emailRegex.exec(text)) !== null) {
-            const val = m[0];
-            const key = `${p}|${val}`;
-            if (!seen.has(key)) {
-              seen.add(key);
-              out.push({ type: "mailto", url: val, page: p }); // バッジ流用のため type=mailto
-            }
-          }
-          // phone
-          while ((m = phoneRegex.exec(text)) !== null) {
-            const val = m[0];
-            const key = `${p}|${val}`;
-            if (!seen.has(key)) {
-              seen.add(key);
-              out.push({ type: "tel", url: val, page: p }); // バッジ流用のため type=tel
-            }
-          }
-        }
-        return out;
-      }
-
-      function renderList(links) {
-        resultList.innerHTML = "";
-        links.forEach(item => {
-          const li = document.createElement("li");
-          const tag = item.type.toUpperCase();
-          const href = makeHref(item);
-          li.innerHTML =
-            '<span class="tag tag-' + item.type + '">' + tag + "</span> " +
-            '<a href="' + href + '" target="_blank" rel="noopener">' + item.url + "</a>" +
-            ' <span class="muted"> (p.' + item.page + ")</span>";
-          resultList.appendChild(li);
-        });
-      }
-
-      function downloadTxt(links) {
-        const text = links.map(l => l.url).join("\n");
-        const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = "links.txt";
-        document.body.appendChild(a);
-        a.click();
-        URL.revokeObjectURL(url);
-        a.remove();
-      }
-      function downloadCsv(links) {
-        const header = ["type","url","page"];
-        const rows = links.map(l => [l.type, '"' + l.url.replace(/"/g,'""') + '"', l.page]);
-        const csv = [header, ...rows].map(r => r.join(",")).join("\n");
-        const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = "links.csv";
-        document.body.appendChild(a);
-        a.click();
-        URL.revokeObjectURL(url);
-        a.remove();
-      }
-
-      function applyTypeFilter(all) {
-        const types = [];
-        if (filterHttp.checked)  types.push("http");
-        if (filterEmail.checked) types.push("mailto"); // プレーンemailもmailto種別として出力
-        if (filterTel.checked)   types.push("tel");    // プレーンphoneもtel種別として出力
-        if (filterFtp.checked)   types.push("ftp");
-
-        // 何もチェックされていなければ http だけでも出す（空画面回避）
-        const enabled = types.length ? types : ["http"];
-        return all.filter(l => enabled.includes(l.type));
-      }
-
-      // ---- イベント ----
-      fileInput.addEventListener("change", () => {
-        const f = fileInput.files[0];
-        if (!f) return;
-        fileMeta.textContent = `${f.name} — ${(f.size/1024/1024).toFixed(2)} MB`;
-      });
-
-      extractBtn.addEventListener("click", async () => {
-        console.log("[extract] clicked");
-        const f = fileInput.files[0];
-        if (!f) { alert("PDFファイルを選択してください"); return; }
-
-        resultList.innerHTML = "";
-        resultCount.textContent = "抽出中…";
-        console.log("[extract] start for", f.name, f.size, "bytes");
-
-        try {
-          let links = await extractLinksFromPDF(f);
-          console.log("[extract] raw =", links.length);
-
-          // 種別フィルタ適用
-          links = applyTypeFilter(links);
-          console.log("[extract] after filter =", links.length);
-
-          const unlocked = isUnlocked();
-          let shown = unlocked ? links : links.slice(0, 10);
-
-          currentLinks = shown;
-          renderList(shown);
-          resultCount.textContent = `抽出結果：${shown.length}件（総計：${links.length}件）`;
-          console.log("[extract] done. shown:", shown.length, "total:", links.length);
-
-          const canSave = unlocked && shown.length > 0;
-          saveTxtBtn.disabled = !canSave;
-          saveCsvBtn.disabled = !canSave;
-        } catch (e) {
-          console.error("[extract] error", e);
-          resultCount.textContent = "抽出に失敗しました。PDFを確認してください。";
-        }
-      });
-
-      document.getElementById("saveTxtBtn").addEventListener("click", () => downloadTxt(currentLinks));
-      document.getElementById("saveCsvBtn").addEventListener("click", () => downloadCsv(currentLinks));
-      iPaidBtn.addEventListener("click", () => {
-        setUnlocked();
-        alert("制限を解除しました（テスト）。再度 抽出 を実行してください。");
-      });
-
+    function setUnlocked(hours = unlockHours) {
+      const until = Date.now() + hours * 3600 * 1000;
+      localStorage.setItem(unlockedKey, String(until));
       updateUnlockUI();
+    }
+    function isUnlocked() {
+      const until = Number(localStorage.getItem(unlockedKey) || 0);
+      return until > Date.now();
+    }
+    function remainingHours() {
+      const until = Number(localStorage.getItem(unlockedKey) || 0);
+      if (until <= Date.now()) return 0;
+      return ((until - Date.now())/3600000).toFixed(1);
+    }
+
+    function banner(el, kind, html){
+      el.innerHTML = `<div class="banner ${kind}">${html}</div>`;
+    }
+    function clearBanner(el){ el.innerHTML = ""; }
+
+    function updateUnlockUI() {
+      const note = document.getElementById("limitNote");
+      const paidBtn = document.getElementById("iPaidBtn");
+      if (isUnlocked()) {
+        note.innerHTML = `<strong>有料モード：</strong> 制限解除中（残り約 ${remainingHours()} 時間）。全件表示・保存が可能です。`;
+        if (paidBtn){ paidBtn.disabled = true; paidBtn.textContent = "解除中"; }
+      }
+    }
+
+    // ---- pdf.js 初期化 ----
+    (function(){
+      const lib = window.pdfjsLib;
+      if (!lib || !lib.getDocument) {
+        alert("pdf.jsの読み込みに失敗しました。/vendor の配置を確認してください。");
+        return;
+      }
+      lib.GlobalWorkerOptions.workerSrc = "./vendor/pdf.worker.min.js";
     })();
+
+    // ---- DOM参照 ----
+    const topBanner = document.getElementById("topBanner");
+    const fileInput  = document.getElementById("fileInput");
+    const fileMeta   = document.getElementById("fileMeta");
+    const extractBtn = document.getElementById("extractBtn");
+    const resultCount= document.getElementById("resultCount");
+    const resultList = document.getElementById("resultList");
+    const saveTxtBtn = document.getElementById("saveTxtBtn");
+    const saveCsvBtn = document.getElementById("saveCsvBtn");
+    const iPaidBtn   = document.getElementById("iPaidBtn");
+    const payLink    = document.getElementById("payLink");
+    const filterHttp = document.getElementById("filterHttp");
+    const filterEmail= document.getElementById("filterEmail");
+    const filterTel  = document.getElementById("filterTel");
+    const filterFtp  = document.getElementById("filterFtp");
+    let currentLinks = [];
+
+    // ---- 決済フローのUX改善 ----
+    // 決済リンクを開いたら「決済中フラグ」を立て、元タブに注意バナーを出す
+    payLink.addEventListener("click", ()=>{
+      localStorage.setItem(payInProgressKey, "1");
+      banner(topBanner, "info",
+        "<b>決済用タブを開きました。</b> このタブは開いたままにしてください。決済完了後、ここに戻るだけで制限が解除されます。");
+    });
+
+    // 他タブから戻ってきた時（focus/visibility）に解除状態を再反映
+    window.addEventListener("focus", updateUnlockUI);
+    document.addEventListener("visibilitychange", ()=>{ if (!document.hidden) updateUnlockUI(); });
+
+    // 支払い後に ?paid=1 で戻ってきたタブ用：解除して案内を表示
+    (function handlePaidQuery(){
+      const p = new URLSearchParams(location.search);
+      if (p.get("paid")==="1"){
+        setUnlocked();
+        // URLを綺麗に
+        try{ history.replaceState({}, "", location.pathname); }catch(e){}
+        // 決済中フラグは消す（どのタブでもOK）
+        localStorage.removeItem(payInProgressKey);
+        // ファイルは保持できない旨のバナー
+        banner(topBanner, "success",
+          "<b>支払いが完了しました。制限を解除しました。</b><div class='actions'><span class='muted'>ブラウザの仕様上、ファイルは保持されません。</span> <button class='btn-inline' id='reselectBtn'>PDFをもう一度選択</button></div>");
+        // フォーカスでファイル選択を開けるように
+        setTimeout(()=>{
+          const btn = document.getElementById("reselectBtn");
+          if (btn){ btn.addEventListener("click", ()=> fileInput.click()); }
+        }, 0);
+      } else if (localStorage.getItem(payInProgressKey)==="1" && !isUnlocked()){
+        // 決済途中でこのタブに戻ってきた場合の注意
+        banner(topBanner, "warn", "決済タブを開いています。完了後、このタブに戻ると自動で解除されます。");
+      }
+    })();
+
+    updateUnlockUI();
+
+    // ---- ヘルパー ----
+    function blobToArrayBuffer(file) {
+      return new Promise((resolve, reject) => {
+        const r = new FileReader(); r.onload = () => resolve(r.result); r.onerror = reject; r.readAsArrayBuffer(file);
+      });
+    }
+    function detectType(url) {
+      const u = (url || "").toLowerCase();
+      if (u.startsWith("http://") || u.startsWith("https://")) return "http";
+      if (u.startsWith("mailto:")) return "mailto";
+      if (u.startsWith("tel:")) return "tel";
+      if (u.startsWith("ftp://")) return "ftp";
+      return "other";
+    }
+    function normalizeTelLink(s){ return "tel:" + s.replace(/[^\d+]/g, ""); }
+    function hrefFor(item){
+      if (item.type==="http"||item.type==="ftp") return item.url;
+      if (item.type==="mailto") return item.url.toLowerCase().startsWith("mailto:")?item.url:("mailto:"+item.url);
+      if (item.type==="tel")    return item.url.toLowerCase().startsWith("tel:")?item.url:normalizeTelLink(item.url);
+      return item.url;
+    }
+
+    async function extractLinksFromPDF(file) {
+      const lib = window.pdfjsLib;
+      const buf = await blobToArrayBuffer(file);
+      const pdf = await lib.getDocument({ data: buf }).promise;
+
+      const urlRegex   = /(?:https?:\/\/[^\s<>"')]+|ftp:\/\/[^\s<>"')]+)/gi;
+      const emailRegex = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
+      const phoneRegex = /\+?\d[\d\s\-()]{6,}\d/g;
+
+      const out = [], seen = new Set();
+
+      for (let p=1; p<=pdf.numPages; p++){
+        const page = await pdf.getPage(p);
+
+        const ann = await page.getAnnotations({ intent:"display" });
+        ann.forEach(a=>{
+          if (a && a.subtype==="Link" && a.url){
+            const key = `${p}|${a.url}`; if (!seen.has(key)){ seen.add(key); out.push({type:detectType(a.url), url:a.url, page:p}); }
+          }
+        });
+
+        const text = (await page.getTextContent()).items.map(i=>i.str).join(" ");
+
+        let m;
+        while ((m=urlRegex.exec(text))!==null){
+          const v = m[0], key = `${p}|${v}`;
+          if (!seen.has(key)){ seen.add(key); out.push({type:detectType(v), url:v, page:p}); }
+        }
+        while ((m=emailRegex.exec(text))!==null){
+          const v = m[0], key = `${p}|${v}`;
+          if (!seen.has(key)){ seen.add(key); out.push({type:"mailto", url:v, page:p}); }
+        }
+        while ((m=phoneRegex.exec(text))!==null){
+          const v = m[0], key = `${p}|${v}`;
+          if (!seen.has(key)){ seen.add(key); out.push({type:"tel", url:v, page:p}); }
+        }
+      }
+      return out;
+    }
+
+    function applyTypeFilter(all){
+      const types = [];
+      if (filterHttp.checked)  types.push("http");
+      if (filterEmail.checked) types.push("mailto");
+      if (filterTel.checked)   types.push("tel");
+      if (filterFtp.checked)   types.push("ftp");
+      const enabled = types.length ? types : ["http"];
+      return all.filter(x=>enabled.includes(x.type));
+    }
+
+    function renderList(links){
+      resultList.innerHTML = "";
+      links.forEach(item=>{
+        const li = document.createElement("li");
+        const tag = item.type.toUpperCase();
+        const href = hrefFor(item);
+        li.innerHTML =
+          '<span class="tag tag-' + item.type + '">' + tag + "</span> " +
+          '<a href="' + href + '" target="_blank" rel="noopener">' + item.url + "</a>" +
+          ' <span class="muted"> (p.' + item.page + ")</span>";
+        resultList.appendChild(li);
+      });
+    }
+
+    function downloadTxt(links){
+      const text = links.map(l=>l.url).join("\n");
+      const blob = new Blob([text], { type:"text/plain;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a"); a.href = url; a.download = "links.txt"; document.body.appendChild(a); a.click(); URL.revokeObjectURL(url); a.remove();
+    }
+    function downloadCsv(links){
+      const header = ["type","url","page"];
+      const rows = links.map(l=>[l.type, '"' + l.url.replace(/"/g,'""') + '"', l.page]);
+      const csv = [header, ...rows].map(r=>r.join(",")).join("\n");
+      const blob = new Blob([csv], { type:"text/csv;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a"); a.href = url; a.download = "links.csv"; document.body.appendChild(a); a.click(); URL.revokeObjectURL(url); a.remove();
+    }
+
+    // ---- イベント ----
+    fileInput.addEventListener("change", ()=>{
+      const f = fileInput.files[0]; if (!f) return;
+      fileMeta.textContent = `${f.name} — ${(f.size/1024/1024).toFixed(2)} MB`;
+      clearBanner(topBanner); // ファイル再選択でバナーを消す
+    });
+
+    extractBtn.addEventListener("click", async ()=>{
+      const f = fileInput.files[0];
+      if (!f){ alert("PDFファイルを選択してください"); return; }
+
+      resultList.innerHTML = "";
+      resultCount.textContent = "抽出中…";
+
+      try{
+        let links = await extractLinksFromPDF(f);
+        links = applyTypeFilter(links);
+
+        const unlocked = isUnlocked();
+        let shown = unlocked ? links : links.slice(0, 10);
+
+        currentLinks = shown;
+        renderList(shown);
+        resultCount.textContent = `抽出結果：${shown.length}件（総計：${links.length}件）`;
+
+        const canSave = unlocked && shown.length > 0;
+        saveTxtBtn.disabled = !canSave;
+        saveCsvBtn.disabled = !canSave;
+      }catch(e){
+        console.error(e);
+        resultCount.textContent = "抽出に失敗しました。PDFを確認してください。";
+      }
+    });
+
+    document.getElementById("saveTxtBtn").addEventListener("click", () => downloadTxt(currentLinks));
+    document.getElementById("saveCsvBtn").addEventListener("click", () => downloadCsv(currentLinks));
+    iPaidBtn.addEventListener("click", () => {
+      setUnlocked();
+      alert("制限を解除しました（テスト）。再度 抽出 を実行してください。");
+    });
   </script>
 </body>
 </html>
