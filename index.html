@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>PDFリンク抽出 Pro — Hybrid</title>
+  <title>PDFリンク抽出 Pro</title>
   <link rel="stylesheet" href="./style.css" />
   <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
   <style>
@@ -14,18 +14,20 @@
     .banner .actions{margin-top:8px}
     .btn-inline{display:inline-block;margin-right:8px;padding:6px 10px;border-radius:8px;border:1px solid #d1d5db}
   </style>
-  <meta property="og:title" content="PDFリンク抽出 Pro | PDF Link Extractor Pro" />
-<meta property="og:description" content="PDF内のURL・メール・電話を一括抽出。ブラウザ内完結、無料プレビュー&CSV/TXT保存。" />
-<meta property="og:url" content="https://pdf-link-extractor-pro.vercel.app/" />
-<meta property="og:image" content="https://pdf-link-extractor-pro.vercel.app/og-image.jpg" />
-<meta name="twitter:card" content="summary_large_image" />
 
+  <!-- OG / Twitter -->
+  <meta property="og:title" content="PDFリンク抽出 Pro | PDF Link Extractor Pro" />
+  <meta property="og:description" content="PDF内のURL・メール・電話を一括抽出。ブラウザ内完結、無料プレビュー&CSV/TXT保存。" />
+  <meta property="og:url" content="https://pdf-link-extractor-pro.vercel.app/" />
+  <meta property="og:image" content="https://pdf-link-extractor-pro.vercel.app/og-image.jpg" />
+  <meta name="twitter:card" content="summary_large_image" />
 </head>
 <body>
   <header class="container">
-    <h1>PDFリンク抽出 Pro <span class="badge">Test</span></h1>
+    <h1>PDFリンク抽出 Pro</h1>
     <p class="sub">
-      PDF内の <b>URL／メールアドレス／電話番号</b> を抽出し、一覧表示・保存。Stripeはテストモードです。
+      PDF内の <b>URL／メールアドレス／電話番号</b> を抽出し、一覧表示・保存。
+      解析はすべて<b>ブラウザ内で完結</b>します。
     </p>
     <div id="topBanner"></div>
   </header>
@@ -47,8 +49,8 @@
       </div>
       <button id="extractBtn" type="button">抽出開始 ▶︎</button>
       <div id="limitNote" class="note">
-        <strong>無料モード：</strong> 最大 <b>10件</b> まで表示・保存可能です。<br />
-        有料解放で制限を解除します（テストモード）。
+        <strong>無料モード：</strong> 最大 <b>10件</b> まで表示。<br />
+        有料プランの購入で制限を解除できます（24時間）。
       </div>
     </section>
 
@@ -63,27 +65,26 @@
     </section>
 
     <section class="card pay">
-      <h2>制限解除（テスト）</h2>
-      <p>ダミーカード <code>4242 4242 4242 4242</code> などでテストできます。</p>
+      <h2>制限解除（24時間）</h2>
+      <p>購入手続きは<b>別タブ</b>で開きます。完了後にこのタブへ自動で戻ります。</p>
       <div class="row">
-        <!-- 別タブで開く。クリック時に「決済中フラグ」を保存 -->
+        <!-- 本番用のPayment Linkに差し替え済み -->
         <a class="btn" id="payLink" href="https://buy.stripe.com/28E4gB1MR1M1cO9h31cV202" target="_blank" rel="noopener">支払いに進む（¥200 / 24h）</a>
-        <button id="iPaidBtn" class="btn secondary" type="button">支払い完了後に解除（手動）</button>
       </div>
-      <p class="small">※ 決済は <b>別タブ</b>で開きます。<b>このタブは開いたまま</b>にして、支払い後に戻ってきてください。</p>
+      <p class="small">※ ブラウザの仕様上、決済後にこのタブへ戻ってもファイルは保持されません。解除後は<b>PDFをもう一度選択</b>してください。</p>
     </section>
   </main>
 
   <footer class="container foot">
     <div><strong>セキュリティ：</strong> 解析はブラウザ内で行われ、ファイルは外部送信されません。</div>
-    <div class="muted">© 2025 Niche Works — Test Build</div>
+    <div class="muted">© 2025 Niche Works</div>
   </footer>
 
   <!-- pdf.js（ローカル） -->
   <script src="./vendor/pdf.min.js"></script>
 
   <script>
-    // ---- ユーティリティ（解除管理） ----
+    // ---- 課金解除管理 ----
     const unlockedKey = "pdf_link_extractor_unlocked_until";
     const unlockHours = 24;
     const payInProgressKey = "pdf_link_extractor_payment_in_progress";
@@ -103,17 +104,13 @@
       return ((until - Date.now())/3600000).toFixed(1);
     }
 
-    function banner(el, kind, html){
-      el.innerHTML = `<div class="banner ${kind}">${html}</div>`;
-    }
+    function banner(el, kind, html){ el.innerHTML = `<div class="banner ${kind}">${html}</div>`; }
     function clearBanner(el){ el.innerHTML = ""; }
 
     function updateUnlockUI() {
       const note = document.getElementById("limitNote");
-      const paidBtn = document.getElementById("iPaidBtn");
       if (isUnlocked()) {
         note.innerHTML = `<strong>有料モード：</strong> 制限解除中（残り約 ${remainingHours()} 時間）。全件表示・保存が可能です。`;
-        if (paidBtn){ paidBtn.disabled = true; paidBtn.textContent = "解除中"; }
       }
     }
 
@@ -136,7 +133,6 @@
     const resultList = document.getElementById("resultList");
     const saveTxtBtn = document.getElementById("saveTxtBtn");
     const saveCsvBtn = document.getElementById("saveCsvBtn");
-    const iPaidBtn   = document.getElementById("iPaidBtn");
     const payLink    = document.getElementById("payLink");
     const filterHttp = document.getElementById("filterHttp");
     const filterEmail= document.getElementById("filterEmail");
@@ -144,44 +140,38 @@
     const filterFtp  = document.getElementById("filterFtp");
     let currentLinks = [];
 
-    // ---- 決済フローのUX改善 ----
-    // 決済リンクを開いたら「決済中フラグ」を立て、元タブに注意バナーを出す
+    // ---- 決済フローのUX ----
     payLink.addEventListener("click", ()=>{
       localStorage.setItem(payInProgressKey, "1");
       banner(topBanner, "info",
         "<b>決済用タブを開きました。</b> このタブは開いたままにしてください。決済完了後、ここに戻るだけで制限が解除されます。");
     });
 
-    // 他タブから戻ってきた時（focus/visibility）に解除状態を再反映
+    // 他タブから戻ってきた時に解除状態を再反映
     window.addEventListener("focus", updateUnlockUI);
     document.addEventListener("visibilitychange", ()=>{ if (!document.hidden) updateUnlockUI(); });
 
-    // 支払い後に ?paid=1 で戻ってきたタブ用：解除して案内を表示
+    // 支払い後 ?paid=1 で戻ったタブ：解除して案内表示
     (function handlePaidQuery(){
       const p = new URLSearchParams(location.search);
       if (p.get("paid")==="1"){
         setUnlocked();
-        // URLを綺麗に
         try{ history.replaceState({}, "", location.pathname); }catch(e){}
-        // 決済中フラグは消す（どのタブでもOK）
         localStorage.removeItem(payInProgressKey);
-        // ファイルは保持できない旨のバナー
         banner(topBanner, "success",
           "<b>支払いが完了しました。制限を解除しました。</b><div class='actions'><span class='muted'>ブラウザの仕様上、ファイルは保持されません。</span> <button class='btn-inline' id='reselectBtn'>PDFをもう一度選択</button></div>");
-        // フォーカスでファイル選択を開けるように
         setTimeout(()=>{
           const btn = document.getElementById("reselectBtn");
           if (btn){ btn.addEventListener("click", ()=> fileInput.click()); }
         }, 0);
       } else if (localStorage.getItem(payInProgressKey)==="1" && !isUnlocked()){
-        // 決済途中でこのタブに戻ってきた場合の注意
         banner(topBanner, "warn", "決済タブを開いています。完了後、このタブに戻ると自動で解除されます。");
       }
     })();
 
     updateUnlockUI();
 
-    // ---- ヘルパー ----
+    // ---- 抽出ロジック ----
     function blobToArrayBuffer(file) {
       return new Promise((resolve, reject) => {
         const r = new FileReader(); r.onload = () => resolve(r.result); r.onerror = reject; r.readAsArrayBuffer(file);
@@ -217,6 +207,7 @@
       for (let p=1; p<=pdf.numPages; p++){
         const page = await pdf.getPage(p);
 
+        // 注釈リンク
         const ann = await page.getAnnotations({ intent:"display" });
         ann.forEach(a=>{
           if (a && a.subtype==="Link" && a.url){
@@ -224,6 +215,7 @@
           }
         });
 
+        // テキストから検出
         const text = (await page.getTextContent()).items.map(i=>i.str).join(" ");
 
         let m;
@@ -286,7 +278,7 @@
     fileInput.addEventListener("change", ()=>{
       const f = fileInput.files[0]; if (!f) return;
       fileMeta.textContent = `${f.name} — ${(f.size/1024/1024).toFixed(2)} MB`;
-      clearBanner(topBanner); // ファイル再選択でバナーを消す
+      clearBanner(topBanner);
     });
 
     extractBtn.addEventListener("click", async ()=>{
@@ -318,10 +310,6 @@
 
     document.getElementById("saveTxtBtn").addEventListener("click", () => downloadTxt(currentLinks));
     document.getElementById("saveCsvBtn").addEventListener("click", () => downloadCsv(currentLinks));
-    iPaidBtn.addEventListener("click", () => {
-      setUnlocked();
-      alert("制限を解除しました（テスト）。再度 抽出 を実行してください。");
-    });
   </script>
 </body>
 </html>
