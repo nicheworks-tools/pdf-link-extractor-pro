@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>PDF Link Extractor Pro — Hybrid (URLs + Emails + Phones)</title>
+  <title>PDF Link Extractor Pro</title>
   <link rel="stylesheet" href="./style.css" />
   <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
   <style>
@@ -14,46 +14,48 @@
     .banner .actions{margin-top:8px}
     .btn-inline{display:inline-block;margin-right:8px;padding:6px 10px;border-radius:8px;border:1px solid #d1d5db}
   </style>
-  <meta property="og:title" content="PDF Link Extractor Pro" />
-<meta property="og:description" content="Extract all URLs, email addresses, and phone numbers from any PDF. 100% browser-based — no uploads required. Free preview and CSV/TXT export." />
-<meta property="og:url" content="https://pdf-link-extractor-pro.vercel.app/index-en.html" />
-<meta property="og:image" content="https://pdf-link-extractor-pro.vercel.app/og-image-en.jpg" />
-<meta name="twitter:card" content="summary_large_image" />
 
+  <!-- OG / Twitter (English) -->
+  <meta property="og:title" content="PDF Link Extractor Pro" />
+  <meta property="og:description" content="Extract all URLs, email addresses, and phone numbers from any PDF. 100% browser-based — no uploads required. Free preview and CSV/TXT export." />
+  <meta property="og:url" content="https://pdf-link-extractor-pro.vercel.app/index-en.html" />
+  <meta property="og:image" content="https://pdf-link-extractor-pro.vercel.app/og-image-en.jpg" />
+  <meta name="twitter:card" content="summary_large_image" />
 </head>
 <body>
   <header class="container">
-    <h1>PDF Link Extractor Pro <span class="badge">Test</span></h1>
+    <h1>PDF Link Extractor Pro</h1>
     <p class="sub">
-      Extract <b>URLs / email addresses / phone numbers</b> from PDFs and save results. Stripe is in test mode.
+      Extract <b>URLs, email addresses, and phone numbers</b> from any PDF.
+      Runs entirely <b>in your browser</b> — no file uploads.
     </p>
     <div id="topBanner"></div>
   </header>
 
   <main class="container">
     <section class="card">
-      <h2>1. Select PDF</h2>
+      <h2>1. Select a file</h2>
       <input id="fileInput" type="file" accept="application/pdf" />
       <div id="fileMeta" class="meta"></div>
     </section>
 
     <section class="card">
-      <h2>2. Extraction Options</h2>
+      <h2>2. Extraction settings</h2>
       <div class="row">
         <label><input type="checkbox" id="filterHttp" checked /> http/https</label>
-        <label><input type="checkbox" id="filterEmail" /> email (plain text included)</label>
-        <label><input type="checkbox" id="filterTel" /> phone (plain text included)</label>
+        <label><input type="checkbox" id="filterEmail" /> email (includes plain text)</label>
+        <label><input type="checkbox" id="filterTel" /> phone (includes plain text)</label>
         <label><input type="checkbox" id="filterFtp" /> ftp</label>
       </div>
-      <button id="extractBtn" type="button">Run Extraction ▶︎</button>
+      <button id="extractBtn" type="button">Start extraction ▶︎</button>
       <div id="limitNote" class="note">
-        <strong>Free mode:</strong> up to <b>10 items</b> can be shown & saved.<br />
-        Unlock to remove the limit (test mode).
+        <strong>Free mode:</strong> Shows up to <b>10</b> links.<br />
+        Unlock with the paid plan (24h) to remove the limit.
       </div>
     </section>
 
     <section class="card">
-      <h2>3. Results</h2>
+      <h2>3. Extraction results</h2>
       <div id="resultCount" class="meta"></div>
       <ol id="resultList"></ol>
       <div class="row actions">
@@ -63,27 +65,26 @@
     </section>
 
     <section class="card pay">
-      <h2>Unlock (Test)</h2>
-      <p>Use Stripe test cards such as <code>4242 4242 4242 4242</code>.</p>
+      <h2>Unlock limit (24 hours)</h2>
+      <p>The checkout will open in a <b>new tab</b>. After completing the payment, you’ll be automatically redirected back here.</p>
       <div class="row">
-        <!-- Opens in a new tab; we keep this tab intact -->
+        <!-- Replace with EN version Payment Link -->
         <a class="btn" id="payLink" href="https://buy.stripe.com/5kQ9AV1MReyNcO9aEDcV204" target="_blank" rel="noopener">Proceed to payment (¥200 / 24h)</a>
-        <button id="iPaidBtn" class="btn secondary" type="button">Mark as paid (manual)</button>
       </div>
-      <p class="small">* The checkout opens in a <b>new tab</b>. Keep this tab open; come back here after payment.</p>
+      <p class="small">* Due to browser security, files are not retained after returning from payment. Please <b>select the PDF again</b> after unlocking.</p>
     </section>
   </main>
 
   <footer class="container foot">
-    <div><strong>Security:</strong> All processing runs in your browser. Files are not uploaded.</div>
-    <div class="muted">© 2025 Niche Works — Test Build</div>
+    <div><strong>Security:</strong> Processing is done entirely in your browser; no files are sent to external servers.</div>
+    <div class="muted">© 2025 Niche Works</div>
   </footer>
 
   <!-- pdf.js (local) -->
   <script src="./vendor/pdf.min.js"></script>
 
   <script>
-    // ---- Unlock & UX helpers ----
+    // ---- Unlock management ----
     const unlockedKey = "pdf_link_extractor_unlocked_until";
     const unlockHours = 24;
     const payInProgressKey = "pdf_link_extractor_payment_in_progress";
@@ -103,17 +104,13 @@
       return ((until - Date.now())/3600000).toFixed(1);
     }
 
-    function banner(el, kind, html){
-      el.innerHTML = `<div class="banner ${kind}">${html}</div>`;
-    }
+    function banner(el, kind, html){ el.innerHTML = `<div class="banner ${kind}">${html}</div>`; }
     function clearBanner(el){ el.innerHTML = ""; }
 
     function updateUnlockUI() {
       const note = document.getElementById("limitNote");
-      const paidBtn = document.getElementById("iPaidBtn");
       if (isUnlocked()) {
-        note.innerHTML = `<strong>Unlocked:</strong> Active for ~${remainingHours()}h. Full list & saving enabled.`;
-        if (paidBtn){ paidBtn.disabled = true; paidBtn.textContent = "Unlocked"; }
+        note.innerHTML = `<strong>Paid mode:</strong> Limit removed (about ${remainingHours()}h remaining). Full view & export enabled.`;
       }
     }
 
@@ -121,7 +118,7 @@
     (function(){
       const lib = window.pdfjsLib;
       if (!lib || !lib.getDocument) {
-        alert("Failed to load pdf.js. Check /vendor placement.");
+        alert("Failed to load pdf.js. Please check /vendor placement.");
         return;
       }
       lib.GlobalWorkerOptions.workerSrc = "./vendor/pdf.worker.min.js";
@@ -136,7 +133,6 @@
     const resultList = document.getElementById("resultList");
     const saveTxtBtn = document.getElementById("saveTxtBtn");
     const saveCsvBtn = document.getElementById("saveCsvBtn");
-    const iPaidBtn   = document.getElementById("iPaidBtn");
     const payLink    = document.getElementById("payLink");
     const filterHttp = document.getElementById("filterHttp");
     const filterEmail= document.getElementById("filterEmail");
@@ -144,11 +140,11 @@
     const filterFtp  = document.getElementById("filterFtp");
     let currentLinks = [];
 
-    // ---- Payment UX ----
+    // ---- Payment flow UX ----
     payLink.addEventListener("click", ()=>{
       localStorage.setItem(payInProgressKey, "1");
       banner(topBanner, "info",
-        "<b>Opened checkout in a new tab.</b> Keep this tab open. After payment, come back here and it will unlock automatically.");
+        "<b>Checkout tab opened.</b> Please keep this tab open. After completing payment, returning here will automatically unlock.");
     });
 
     window.addEventListener("focus", updateUnlockUI);
@@ -161,19 +157,19 @@
         try{ history.replaceState({}, "", location.pathname); }catch(e){}
         localStorage.removeItem(payInProgressKey);
         banner(topBanner, "success",
-          "<b>Payment completed. Unlocked.</b><div class='actions'><span class='muted'>For security reasons, the file cannot be kept across tabs.</span> <button class='btn-inline' id='reselectBtn'>Select PDF again</button></div>");
+          "<b>Payment completed. Limit removed.</b><div class='actions'><span class='muted'>Due to browser security, files are not retained.</span> <button class='btn-inline' id='reselectBtn'>Select PDF again</button></div>");
         setTimeout(()=>{
           const btn = document.getElementById("reselectBtn");
           if (btn){ btn.addEventListener("click", ()=> fileInput.click()); }
         }, 0);
       } else if (localStorage.getItem(payInProgressKey)==="1" && !isUnlocked()){
-        banner(topBanner, "warn", "Checkout is open. After completing payment, return to this tab to apply unlock.");
+        banner(topBanner, "warn", "Checkout tab is open. After completing payment, return here to unlock automatically.");
       }
     })();
 
     updateUnlockUI();
 
-    // ---- Helpers ----
+    // ---- Extraction ----
     function blobToArrayBuffer(file) {
       return new Promise((resolve, reject) => {
         const r = new FileReader(); r.onload = () => resolve(r.result); r.onerror = reject; r.readAsArrayBuffer(file);
@@ -208,7 +204,6 @@
 
       for (let p=1; p<=pdf.numPages; p++){
         const page = await pdf.getPage(p);
-
         const ann = await page.getAnnotations({ intent:"display" });
         ann.forEach(a=>{
           if (a && a.subtype==="Link" && a.url){
@@ -274,7 +269,6 @@
       const a = document.createElement("a"); a.href = url; a.download = "links.csv"; document.body.appendChild(a); a.click(); URL.revokeObjectURL(url); a.remove();
     }
 
-    // ---- Events ----
     fileInput.addEventListener("change", ()=>{
       const f = fileInput.files[0]; if (!f) return;
       fileMeta.textContent = `${f.name} — ${(f.size/1024/1024).toFixed(2)} MB`;
@@ -283,7 +277,7 @@
 
     extractBtn.addEventListener("click", async ()=>{
       const f = fileInput.files[0];
-      if (!f){ alert("Please select a PDF file."); return; }
+      if (!f){ alert("Please select a PDF file"); return; }
 
       resultList.innerHTML = "";
       resultCount.textContent = "Extracting…";
@@ -297,23 +291,19 @@
 
         currentLinks = shown;
         renderList(shown);
-        resultCount.textContent = `Results: ${shown.length} items (Total: ${links.length})`;
+        resultCount.textContent = `Results: ${shown.length} shown (Total: ${links.length})`;
 
         const canSave = unlocked && shown.length > 0;
         saveTxtBtn.disabled = !canSave;
         saveCsvBtn.disabled = !canSave;
       }catch(e){
         console.error(e);
-        resultCount.textContent = "Extraction failed. Please check your PDF.";
+        resultCount.textContent = "Failed to extract links. Please check the PDF.";
       }
     });
 
     document.getElementById("saveTxtBtn").addEventListener("click", () => downloadTxt(currentLinks));
     document.getElementById("saveCsvBtn").addEventListener("click", () => downloadCsv(currentLinks));
-    iPaidBtn.addEventListener("click", () => {
-      setUnlocked();
-      alert("Unlocked for test. Please run extraction again.");
-    });
   </script>
 </body>
 </html>
